@@ -8,21 +8,9 @@ pipeline {
             }
         }
 
-        stage('Setup Python') {
-            steps {
-                // Use bash to run commands
-                sh '''#!/bin/bash
-                python3 -m venv venv
-                source venv/bin/activate
-                pip install -r requirements.txt || echo "No requirements.txt found"
-                '''
-            }
-        }
-
         stage('Run Python Script') {
             steps {
-                sh '''#!/bin/bash
-                source venv/bin/activate
+                sh '''
                 python3 app.py
                 '''
             }
@@ -31,10 +19,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build and Python script executed successfully!'
+            echo '✅ Python script executed successfully!'
         }
         failure {
-            echo '❌ Something went wrong. Check the build logs.'
+            echo '❌ Something went wrong. Check logs.'
         }
     }
 }
