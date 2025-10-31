@@ -4,26 +4,24 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // Pull code from GitHub
                 git branch: 'main', url: 'https://github.com/usmanfarooq317/jenkins-demo.git'
             }
         }
 
         stage('Setup Python') {
             steps {
-                // Setup virtual environment and install dependencies
-                sh '''
+                // Use bash to run commands
+                sh '''#!/bin/bash
                 python3 -m venv venv
                 source venv/bin/activate
-                pip install -r requirements.txt
+                pip install -r requirements.txt || echo "No requirements.txt found"
                 '''
             }
         }
 
         stage('Run Python Script') {
             steps {
-                // Run the Python script
-                sh '''
+                sh '''#!/bin/bash
                 source venv/bin/activate
                 python3 app.py
                 '''
@@ -33,10 +31,10 @@ pipeline {
 
     post {
         success {
-            echo 'Build and Python script executed successfully!'
+            echo '✅ Build and Python script executed successfully!'
         }
         failure {
-            echo 'Something went wrong. Check the build logs.'
+            echo '❌ Something went wrong. Check the build logs.'
         }
     }
 }
