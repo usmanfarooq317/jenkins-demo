@@ -11,18 +11,34 @@ pipeline {
         stage('Run Python Script') {
             steps {
                 sh '''
-                python3 app.py
+                echo "Running main Python app..."
+                python3 app.py > output.log
                 '''
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                sh '''
+                echo "Running tests..."
+                python3 test_app.py >> output.log
+                '''
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                archiveArtifacts artifacts: 'output.log', fingerprint: true
             }
         }
     }
 
     post {
         success {
-            echo '✅ Python script executed successfully!'
+            echo '✅ Build, test, and artifact archive successful!'
         }
         failure {
-            echo '❌ Something went wrong. Check logs.'
+            echo '❌ Build or test failed. Check logs.'
         }
     }
 }

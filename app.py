@@ -1,9 +1,3 @@
-# test_app.py
+# app.py
+print("Hello from Jenkins Python build!")
 
-def test_message():
-    message = "Hello from Jenkins Python build!"
-    assert message == "Hello from Jenkins Python build!"
-
-if __name__ == "__main__":
-    test_message()
-    print("✅ Test passed successfully!")
