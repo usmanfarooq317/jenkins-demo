@@ -74,7 +74,7 @@ pipeline {
             echo '✅ Code Pushed → Docker Built → Pushed → EC2 Deployed Successfully!'
         }
         failure {
-            echo '❌ Failed. Check logs.'
+            echo '❌ Failed. Check the logs.'
         }
     }
 }
