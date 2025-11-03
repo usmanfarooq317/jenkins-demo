@@ -3,78 +3,61 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        DOCKERHUB_USERNAME = 'usmanfarooq317'
-        IMAGE_NAME = 'jenkins-demo-app'
-        IMAGE_TAG = 'latest'
-        EC2_KEY = credentials('ec2-ssh-key')  // Upload PEM file in Jenkins as secret file
-        EC2_USER = 'ubuntu'
-        EC2_HOST = '54.89.241.89'
-        SSH_KEY_PATH = '/tmp/clboth.pem'
+        EC2_KEY = credentials('ec2-ssh-key') // Jenkins → Credentials → SSH Key
+        DOCKER_IMAGE = 'usmanfarooq317/jenkins-demo-app:latest'
+        EC2_USER = 'ubuntu'    // Change if your EC2 AMI has a different username
+        EC2_HOST = '54.89.241.89'  // <- Replace this
     }
 
     stages {
         stage('Clone Repository') {
             steps {
-                sh '''
-                echo "Cloning repository..."
-                rm -rf jenkins-demo || true
-                git clone https://github.com/usmanfarooq317/jenkins-demo.git
-                cd jenkins-demo
-                '''
+                echo 'Cloning repository...'
+                git url: 'https://github.com/usmanfarooq317/jenkins-demo.git', branch: 'main'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                echo "Building Docker image..."
-                cd jenkins-demo
-                docker build -t $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG .
-                '''
+                echo 'Building Docker image...'
+                sh 'docker build -t $DOCKER_IMAGE .'
             }
         }
 
         stage('Login & Push to Docker Hub') {
             steps {
-                sh '''
-                echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_USERNAME --password-stdin
-                docker push $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                '''
+                echo 'Logging in to Docker Hub...'
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                sh 'docker push $DOCKER_IMAGE'
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                sh '''
-                echo "Saving SSH key..."
-                echo "$EC2_KEY" > $SSH_KEY_PATH
-                chmod 600 $SSH_KEY_PATH
+                echo 'Deploying on EC2...'
+                sh """
+                ssh -o StrictHostKeyChecking=no -i $EC2_KEY $EC2_USER@$EC2_HOST '
+                    echo "Pulling latest Docker image..."
+                    docker pull $DOCKER_IMAGE || true
 
-                echo "Deploying on EC2..."
+                    echo "Stopping old container..."
+                    docker stop jenkins-demo-container || true
+                    docker rm jenkins-demo-container || true
 
-                ssh -o StrictHostKeyChecking=no -i $SSH_KEY_PATH $EC2_USER@$EC2_HOST << 'EOF'
-                echo "Logging into EC2 instance..."
-                
-                # Stop old container if running
-                docker rm -f jenkins-demo-container || true
-
-                # Pull latest image from Docker Hub
-                docker pull $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-
-                # Run new container on port 6500
-                docker run -d --name jenkins-demo-container -p 6500:6500 $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                EOF
-                '''
+                    echo "Running new container on port 6500..."
+                    docker run -d --name jenkins-demo-container -p 6500:6500 $DOCKER_IMAGE
+                '
+                """
             }
         }
     }
 
     post {
         success {
-            echo '✅ Code Pushed → Docker Built → Pushed → EC2 Deployed Successfully!'
+            echo "✅ Pipeline completed successfully!"
         }
         failure {
-            echo '❌ Failed. Check the logs.'
+            echo "❌ Pipeline failed! Check error logs."
         }
     }
 }
