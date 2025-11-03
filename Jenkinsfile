@@ -6,91 +6,75 @@ pipeline {
         DOCKERHUB_USERNAME = 'usmanfarooq317'
         IMAGE_NAME = 'jenkins-demo-app'
         IMAGE_TAG = 'latest'
+        EC2_KEY = credentials('ec2-ssh-key')  // Upload PEM file in Jenkins as secret file
+        EC2_USER = 'ubuntu'
+        EC2_HOST = '54.89.241.89'
+        SSH_KEY_PATH = '/tmp/clboth.pem'
     }
 
     stages {
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', url: 'https://github.com/usmanfarooq317/jenkins-demo.git'
-            }
-        }
-
-        stage('Run Python App') {
+        stage('Clone Repository') {
             steps {
                 sh '''
-                echo "Running main Python app..."
-                python3 app.py > output.log
-                '''
-            }
-        }
-
-        stage('Run Tests') {
-            steps {
-                sh '''
-                echo "Running tests..."
-                python3 test_app.py >> output.log
+                echo "Cloning repository..."
+                rm -rf jenkins-demo || true
+                git clone https://github.com/usmanfarooq317/jenkins-demo.git
+                cd jenkins-demo
                 '''
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh '''
-                    echo "Building Docker image..."
-                    docker build -t $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG .
-                    '''
-                }
+                sh '''
+                echo "Building Docker image..."
+                cd jenkins-demo
+                docker build -t $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG .
+                '''
             }
         }
 
-        stage('Login to Docker Hub') {
+        stage('Login & Push to Docker Hub') {
             steps {
-                script {
-                    sh '''
-                    echo "Logging in to Docker Hub..."
-                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_USERNAME --password-stdin
-                    '''
-                }
+                sh '''
+                echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_USERNAME --password-stdin
+                docker push $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                '''
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Deploy to EC2') {
             steps {
-                script {
-                    sh '''
-                    echo "Pushing Docker Image to Docker Hub..."
-                    docker push $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                    '''
-                }
-            }
-        }
+                sh '''
+                echo "Saving SSH key..."
+                echo "$EC2_KEY" > $SSH_KEY_PATH
+                chmod 600 $SSH_KEY_PATH
 
-        stage('Run Container (Optional)') {
-            steps {
-                script {
-                    sh '''
-                    echo "Running Docker container on port 6500..."
-                    docker rm -f jenkins-demo-container || true
-                    docker run -d --name jenkins-demo-container -p 6500:6500 $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                    '''
-                }
-            }
-        }
+                echo "Deploying on EC2..."
 
-        stage('Archive Artifacts') {
-            steps {
-                archiveArtifacts artifacts: 'output.log', fingerprint: true
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY_PATH $EC2_USER@$EC2_HOST << 'EOF'
+                echo "Logging into EC2 instance..."
+                
+                # Stop old container if running
+                docker rm -f jenkins-demo-container || true
+
+                # Pull latest image from Docker Hub
+                docker pull $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+
+                # Run new container on port 6500
+                docker run -d --name jenkins-demo-container -p 6500:6500 $DOCKERHUB_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                EOF
+                '''
             }
         }
     }
 
     post {
         success {
-            echo '✅ Build, Test & Docker Push Successful!'
+            echo '✅ Code Pushed → Docker Built → Pushed → EC2 Deployed Successfully!'
         }
         failure {
-            echo '❌ Something went wrong. Check logs.'
+            echo '❌ Failed. Check logs.'
         }
     }
 }
